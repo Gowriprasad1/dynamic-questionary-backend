@@ -15,7 +15,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // MongoDB connection
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/mern-dynamic-form', {
+mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
@@ -30,7 +30,7 @@ app.use('/api/user', require('./routes/userSubmissionRoutes'));
 app.use('/api/categories', require('./routes/categoryRoutes'));
 
 // Basic route
-app.get('/', (req, res) => {
+app.get('/health', (req, res) => {
   res.json({ message: 'MERN Dynamic Form API is running!' });
 });
 
