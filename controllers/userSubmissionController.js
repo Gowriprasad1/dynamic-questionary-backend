@@ -128,7 +128,7 @@ async function verifyOtp(req, res) {
   }
 }
 
-// Save questions + answers (draft/final)
+// Save questions + answers (draft upsert -> active)
 async function saveQuestion(req, res) {
   try {
     const { appNumber, mobile, category, answers } = req.body;
@@ -138,25 +138,49 @@ async function saveQuestion(req, res) {
     const ipAddress = req.ip || req.connection.remoteAddress;
     const userAgent = req.get('user-agent');
 
-    const submission = new UserSubmission({
-      category,
-      appNumber: appNumber || null,
-      mobile: mobile || null,
-      answers,
-      ipAddress,
-      userAgent
-    });
+    const filter = appNumber ? { category, appNumber } : (mobile ? { category, mobile } : { category });
+    const update = {
+      $set: {
+        category,
+        appNumber: appNumber || null,
+        mobile: mobile || null,
+        answers,
+        status: 'active',
+        ipAddress,
+        userAgent,
+        updatedAt: new Date()
+      }
+    };
+    const options = { upsert: true, new: true, setDefaultsOnInsert: true };
 
-    await submission.save();
+    const submission = await UserSubmission.findOneAndUpdate(filter, update, options);
 
-    return res.status(201).json({ success: true, message: 'Saved', submissionId: submission._id });
+    return res.status(200).json({ success: true, message: 'Draft saved', submissionId: submission._id });
   } catch (err) {
     console.error('save-question error', err);
     return res.status(500).json({ success: false, message: 'Failed to save', error: err.message });
   }
 }
 
-// Check duplicate by category + appNumber
+// Get latest saved progress by category + appNumber or mobile
+async function getProgress(req, res) {
+  try {
+    const { category, appNumber, mobile } = req.query;
+    if (!category) return res.status(400).json({ message: 'category is required' });
+    const filter = { category };
+    if (appNumber) filter.appNumber = appNumber;
+    if (mobile) filter.mobile = mobile;
+
+    const doc = await UserSubmission.findOne(filter).sort({ updatedAt: -1, createdAt: -1 }).lean();
+    if (!doc) return res.status(404).json({ message: 'No progress found' });
+    return res.json({ success: true, progress: { answers: doc.answers || {}, appNumber: doc.appNumber || null, mobile: doc.mobile || null, updatedAt: doc.updatedAt || doc.createdAt } });
+  } catch (err) {
+    console.error('getProgress error', err);
+    return res.status(500).json({ success: false, message: 'Failed to fetch progress', error: err.message });
+  }
+}
+
+// Check duplicate by category + appNumber, only if already submitted
 async function checkDuplicate(req, res) {
   try {
     const { category, appNumber } = req.body;
@@ -165,7 +189,7 @@ async function checkDuplicate(req, res) {
       return res.status(400).json({ message: 'Application number and category are required' });
     }
 
-    const existingSubmission = await UserSubmission.findOne({ category, appNumber });
+    const existingSubmission = await UserSubmission.findOne({ category, appNumber, status: 'submitted' });
 
     if (existingSubmission) {
       return res.status(200).json({
@@ -181,7 +205,7 @@ async function checkDuplicate(req, res) {
   }
 }
 
-// Submit answers (upsert if appNumber present)
+// Submit answers (upsert if appNumber present) -> mark as submitted
 async function submitAnswers(req, res) {
   try {
     const { category, answers, appNumber, mobile } = req.body;
@@ -196,7 +220,7 @@ async function submitAnswers(req, res) {
     }
 
     if (appNumber) {
-      const existingSubmission = await UserSubmission.findOne({ category, appNumber });
+      const existingSubmission = await UserSubmission.findOne({ category, appNumber, status: 'submitted' });
       if (existingSubmission) {
         return res.status(409).json({
           message: 'Questionnaire already submitted with this application number and category',
@@ -210,7 +234,7 @@ async function submitAnswers(req, res) {
 
     const filter = appNumber ? { category, appNumber } : { _id: new mongoose.Types.ObjectId() };
 
-    const updateFields = { category, answers, ipAddress, userAgent, submittedAt: new Date() };
+    const updateFields = { category, answers, status: 'submitted', ipAddress, userAgent, submittedAt: new Date() };
     if (mobile) updateFields.mobile = mobile;
     if (appNumber) updateFields.appNumber = appNumber;
 
@@ -268,6 +292,7 @@ module.exports = {
   sendOtp,
   verifyOtp,
   saveQuestion,
+  getProgress,
   checkDuplicate,
   submitAnswers,
   getSubmissionsByCategory,

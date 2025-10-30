@@ -17,11 +17,12 @@ async function seedUsers() {
       useUnifiedTopology: true,
     });
     console.log('MongoDB connected successfully');
+    console.log('Connected DB:', mongoose.connection.db.databaseName);
 
     // Check and create users
     for (const userData of initialUsers) {
-      const existingUser = await User.findOne({ userId: userData.userId });
-      
+      // const existingUser = await User.findOne({ userId: userData.userId });
+      const existingUser = false
       if (existingUser) {
         console.log(`User ${userData.userId} already exists, skipping...`);
       } else {

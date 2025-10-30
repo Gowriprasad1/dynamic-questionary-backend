@@ -8,6 +8,7 @@ router.post('/lookup', ctrl.lookup);
 router.post('/send-otp', ctrl.sendOtp);
 router.post('/verify-otp', ctrl.verifyOtp);
 router.post('/save-question', ctrl.saveQuestion);
+router.get('/progress', ctrl.getProgress);
 router.post('/check-duplicate', ctrl.checkDuplicate);
 router.post('/submit', ctrl.submitAnswers);
 router.get('/submissions/:category', ctrl.getSubmissionsByCategory);

@@ -30,9 +30,14 @@ const userSubmissionSchema = new mongoose.Schema({
       required: true
     }
   }],
+  status: {
+    type: String,
+    enum: ['active', 'submitted'],
+    default: 'active',
+    index: true
+  },
   submittedAt: {
-    type: Date,
-    default: Date.now
+    type: Date
   },
   ipAddress: {
     type: String
@@ -40,9 +45,10 @@ const userSubmissionSchema = new mongoose.Schema({
   userAgent: {
     type: String
   }
-});
+}, { timestamps: true });
 
 // Index for faster queries
+userSubmissionSchema.index({ category: 1, appNumber: 1, status: 1 });
 userSubmissionSchema.index({ category: 1, submittedAt: -1 });
 
 module.exports = mongoose.model('UserSubmission', userSubmissionSchema);
