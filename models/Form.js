@@ -121,6 +121,15 @@ const subQuestionSchema = new mongoose.Schema({
   }
 }, { _id: true });
 
+// Enable nested child questions for sub-questions
+subQuestionSchema.add({
+  children: { type: String, default: null },
+  subQuestions: { type: [/* recursive */] }
+});
+
+// After initial add, attach recursive reference
+subQuestionSchema.path('subQuestions', [subQuestionSchema]);
+
 // Define questionSchema with sub-questions
 const questionSchema = new mongoose.Schema({
   question: {

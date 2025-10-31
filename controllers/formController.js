@@ -74,6 +74,25 @@ async function getById(req, res) {
   }
 }
 
+// Recursively clean and attach validators for sub-questions
+const cleanSubQuestion = (subQ) => ({
+  question: subQ.question,
+  questionType: subQ.questionType,
+  questionId: subQ.questionId,
+  questionNumber: subQ.questionNumber || '',
+  option_type: subQ.option_type,
+  options: (subQ.options || []).map(opt => ({ key: opt.key, val: opt.val })),
+  validator_values: subQ.validator_values || {},
+  error_messages: subQ.error_messages || {},
+  validators: generateValidatorsObject(subQ),
+  validator_options: subQ.validator_options || [],
+  triggerValue: subQ.triggerValue || '',
+  children: subQ.children || '',
+  listItems: Array.isArray(subQ.listItems) ? subQ.listItems : [],
+  order: subQ.order || 0,
+  subQuestions: Array.isArray(subQ.subQuestions) ? subQ.subQuestions.map(cleanSubQuestion) : []
+});
+
 async function create(req, res) {
   try {
     const errors = validationResult(req);
@@ -85,11 +104,24 @@ async function create(req, res) {
       if (question.questionNumber && /^\d+$/.test(question.questionNumber.trim())) {
         processedQuestions = reorderQuestionNumbers(processedQuestions, question.questionNumber);
       }
-      processedQuestions.push({
-        ...question,
+      const cleanedQuestion = {
+        question: question.question,
+        questionType: question.questionType,
+        questionId: question.questionId,
+        questionNumber: question.questionNumber || '',
+        option_type: question.option_type,
+        options: (question.options || []).map(opt => ({ key: opt.key, val: opt.val })),
+        validator_values: question.validator_values || {},
+        error_messages: question.error_messages || {},
         validators: generateValidatorsObject(question),
-        subQuestions: question.subQuestions?.map(subQ => ({ ...subQ, validators: generateValidatorsObject(subQ) })) || []
-      });
+        validator_options: question.validator_options || [],
+        children: question.children || '',
+        parentQuestionId: question.parentQuestionId || '',
+        listItems: Array.isArray(question.listItems) ? question.listItems : [],
+        order: i,
+        subQuestions: Array.isArray(question.subQuestions) ? question.subQuestions.map(cleanSubQuestion) : []
+      };
+      processedQuestions.push(cleanedQuestion);
     }
 
     const formData = { ...req.body, questions: processedQuestions };
@@ -115,31 +147,13 @@ async function update(req, res) {
         if (question.questionNumber && /^\d+$/.test(question.questionNumber.trim())) {
           processedQuestions = reorderQuestionNumbers(processedQuestions, question.questionNumber, i);
         }
-        let cleanedSubQuestions = [];
-        if (question.subQuestions && Array.isArray(question.subQuestions) && question.subQuestions.length > 0) {
-          cleanedSubQuestions = question.subQuestions.map(subQ => ({
-            question: subQ.question,
-            questionType: subQ.questionType,
-            questionId: subQ.questionId,
-            questionNumber: subQ.questionNumber || '',
-            option_type: subQ.option_type,
-            options: subQ.options?.map(opt => ({ key: opt.key, val: opt.val })) || [],
-            validator_values: cleanObject(subQ.validator_values),
-            error_messages: cleanObject(subQ.error_messages),
-            validators: generateValidatorsObject(subQ),
-            validator_options: subQ.validator_options || [],
-            triggerValue: subQ.triggerValue || '',
-            listItems: Array.isArray(subQ.listItems) ? subQ.listItems : [],
-            order: subQ.order || 0
-          }));
-        }
         const cleanedQuestion = {
           question: question.question,
           questionType: question.questionType,
           questionId: question.questionId,
           questionNumber: question.questionNumber || '',
           option_type: question.option_type,
-          options: question.options?.map(opt => ({ key: opt.key, val: opt.val })) || [],
+          options: (question.options || []).map(opt => ({ key: opt.key, val: opt.val })),
           validator_values: cleanObject(question.validator_values),
           error_messages: cleanObject(question.error_messages),
           validators: generateValidatorsObject(question),
@@ -148,7 +162,7 @@ async function update(req, res) {
           parentQuestionId: question.parentQuestionId || '',
           listItems: Array.isArray(question.listItems) ? question.listItems : [],
           order: question.order || 0,
-          subQuestions: cleanedSubQuestions
+          subQuestions: Array.isArray(question.subQuestions) ? question.subQuestions.map(cleanSubQuestion) : []
         };
         processedQuestions.push(cleanedQuestion);
       }
