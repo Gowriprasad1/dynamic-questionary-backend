@@ -36,6 +36,10 @@ const userSubmissionSchema = new mongoose.Schema({
     default: 'active',
     index: true
   },
+  pageNumber: {
+    type: Number,
+    default: 1
+  },
   submittedAt: {
     type: Date
   },

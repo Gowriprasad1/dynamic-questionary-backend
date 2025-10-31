@@ -99,7 +99,7 @@ async function sendOtp(req, res) {
 // Verify OTP
 async function verifyOtp(req, res) {
   try {
-    const { mobile, otp } = req.body;
+    const { mobile, otp, category, appNumber } = req.body;
     if (!mobile) return res.status(400).json({ success: false, message: 'mobile required' });
 
     const otpDoc = await Otp.findOne({ mobile }).sort({ createdAt: -1 }).exec();
@@ -116,6 +116,35 @@ async function verifyOtp(req, res) {
 
     if (otpDoc.otp === otp) {
       await Otp.deleteMany({ mobile });
+      // Create short-lived OTP JWT cookie
+      const jwt = require('jsonwebtoken');
+      const { JWT_SECRET } = require('../middleware/auth');
+      const payload = {
+        purpose: 'otp',
+        mobile,
+        category: category || null,
+        iat: Math.floor(Date.now() / 1000)
+      };
+      const token = jwt.sign(payload, JWT_SECRET, { expiresIn: '10m' });
+      // Set cookie: httpOnly, sameSite=lax; secure in production if https
+      res.cookie('otp_token', token, {
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: !!process.env.COOKIE_SECURE,
+        maxAge: 10 * 60 * 1000
+      });
+      // Upsert a submission shell with pageNumber=1 (only on insert)
+      try {
+        const filter = appNumber ? { category: category || null, appNumber } : { category: category || null, mobile };
+        await UserSubmission.findOneAndUpdate(
+          filter,
+          {
+            $set: { category: category || null, appNumber: appNumber || null, mobile: mobile || null, status: 'active' },
+            $setOnInsert: { pageNumber: 1 }
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } catch (_) {}
       return res.json({ success: true, message: 'Verified' });
     }
 
@@ -146,6 +175,7 @@ async function saveQuestion(req, res) {
         mobile: mobile || null,
         answers,
         status: 'active',
+        pageNumber: 2,
         ipAddress,
         userAgent,
         updatedAt: new Date()
@@ -173,7 +203,7 @@ async function getProgress(req, res) {
 
     const doc = await UserSubmission.findOne(filter).sort({ updatedAt: -1, createdAt: -1 }).lean();
     if (!doc) return res.status(404).json({ message: 'No progress found' });
-    return res.json({ success: true, progress: { answers: doc.answers || {}, appNumber: doc.appNumber || null, mobile: doc.mobile || null, updatedAt: doc.updatedAt || doc.createdAt } });
+    return res.json({ success: true, progress: { answers: doc.answers || {}, appNumber: doc.appNumber || null, mobile: doc.mobile || null, pageNumber: doc.pageNumber || 1, status: doc.status || 'active', updatedAt: doc.updatedAt || doc.createdAt } });
   } catch (err) {
     console.error('getProgress error', err);
     return res.status(500).json({ success: false, message: 'Failed to fetch progress', error: err.message });
